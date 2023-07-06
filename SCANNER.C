@@ -6,7 +6,7 @@
 
 #include "ops.h"
 
-/* Check name of token being keyword function */
+ /* Check name of token being keyword function */
 static VOID UpdateKeyword( TOK *T )
 {
   INT i;
@@ -20,8 +20,8 @@ static VOID UpdateKeyword( TOK *T )
     {"if", KW_IF},
     {"else", KW_ELSE},
     {"while", KW_WHILE},
-		{"scan", KW_SCAN},
-		{"print", KW_PRINT}
+    {"scan", KW_SCAN},
+    {"print", KW_PRINT}
   };
  
   for (i = 0; i < sizeof(Kws) / sizeof(Kws[0]); i++)
@@ -34,39 +34,31 @@ static VOID UpdateKeyword( TOK *T )
 } /* End of 'UpdateKeyword' function */
 
 /* Check name of token being function function */
-/*
 static VOID UpdateFunction( TOK *T )
 {
   INT i;
 
-  struct
-  {
-    CHAR *Name;
-    FUNCS Fn; 
-  } Fnc[] =
-  {
-    {"scan", FN_SCAN},
-    {"print", FN_PRINT},
-    {"sin", FN_SIN}
-  };
- 
-  for (i = 0; i < sizeof(Fnc) / sizeof(Fnc[0]); i++)
-    if (strcmp(Fnc[i].Name, T->Name) == 0)
+  for (i = 0; i < sizeof(FuncTable) / sizeof(FuncTable[0]); i++)
+    if (strcmp(FuncTable[i].Name, T->Name) == 0)
     {
-      T->Id = TOK_FN;
-      T->Fn = Fnc[i].Fn; 
+      T->Id = TOK_FUNC;
+      T->Func = FuncTable[i].Func;
       return;
     }
 } /* End of 'UpdateFunctions' function */
 
 /* Scan expression function */
-VOID Scanner( QUEUE *Q, CHAR *S )
+BOOL Scanner( QUEUE *Q, CHAR *S )
 {
   INT i;
   TOK T;
 
-  while (*S != 0)
+  while (*S != 0 )
   {
+    if (*S == '/' && S[1] == '/')
+      return FALSE;
+
+    T.Op = OP_NULL;
     T.Id = 0;
     switch(*S)
     {
@@ -90,10 +82,10 @@ VOID Scanner( QUEUE *Q, CHAR *S )
     case '>':
     case '!':
       T.Id = TOK_OP;
-    T.Op = *S++;
-    if ((UCHAR)*S == '=' && (T.Op == '<' || T.Op == '=' || T.Op == '>' || T.Op == '!'))
-      T.Op += TOK_OP_ADD_EQ, S++;
-    break;
+      T.Op = *S++;
+      if ((UCHAR)*S == '=' && (T.Op == '<' || T.Op == '=' || T.Op == '>' || T.Op == '!'))
+        T.Op += TOK_OP_ADD_EQ, S++;
+      break;
 
     case '0':
     case '1':
@@ -127,42 +119,56 @@ VOID Scanner( QUEUE *Q, CHAR *S )
 
     default:
       i = 0;
-      memset(T.Name, 0, MAX_NAME);
-			memset(T.Text, 0, MAX_NAME);
+
       if (isalpha((UCHAR)*S) || *S == '"')
       {
-				BOOL IsText, WasSpace = FALSE;
+        BOOL IsText;
 
-        IsText = *S == '"';
-				T.Text[i++] = *S++;
-				if (IsText)
-          while (S != 0)					 
-					  T.Text[i++] = *S++;
-				else
-					while (S != 0 && (isalpha(*S) || isdigit(*S) || *S == '_'))
-						T.Text[i++] = *S++;
+        IsText = (*S == '\"');
+        if (IsText)
+        {
+          CHAR Prev = 0;
 
-				printf("\n%s\n", T.Text);
-				if (!IsText)
-				{
-					T.Id = TOK_VAR;
-					strcpy(T.Name, T.Text);
-				}
-				else
-				  if (T.Name[i - 1] != '"')
-					  Error("Missing '\"'");
-					else
-						T.Id = TOK_TXT;
+          T.Id = TOK_TXT;
+          memset(T.Text, 0, MAX_TEXT);
+          T.Name[0] = 0;
+
+          S++;
+          while (*S != '\"' && *S != 0)
+          {
+            if (*S == '\\')
+            {
+              S++;
+              T.Text[i++] = (*S == 'n') ? '\n' : (*S == '\\') ? '\\' : (*S == 't') ? '\t' : (*S == 'r') ? '\r' : (*S == 'a') ? '\a' : (*S == 'v') ? '\v' : '\0';
+              S++;
+            }
+            else
+              T.Text[i++] = *S++;
+          }
+          T.Text[i++] = *S++;
+
+          if (T.Text[i - 1] != '"')
+            Error("Missing '\"'");
+          else
+            T.Text[i - 1] = 0;
+        }
+        else
+        {
+          T.Id = TOK_VAR;
+          memset(T.Name, 0, MAX_NAME);
+
+          T.Name[i++] = *S++;
+          while (S != 0 && (isalpha(*S) || isdigit(*S) || *S == '_'))
+            T.Name[i++] = *S++;
+        }
       }
       else
-      {
         Error("Unrecognised symbol '%c'", *S);
-        return;
-      }
       UpdateKeyword(&T);
-			/* UpdateFunction(&T); */
+      UpdateFunction(&T);
     }
     Put(Q, T);
   }
+  return TRUE;
 } /* End of 'Scanner' funstion*/
 /*END OF 'SCANNER.C' FILE*/

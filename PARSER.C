@@ -5,8 +5,8 @@
 #include "ops.h"
 
 #define NextTok() \
-  (IsEOTL ? Error("Unexpected end-of-data") : \
-    Get(&TokList, &TokCurrent) ?  (VOID)0 : (VOID)(IsEOTL = TRUE))
+  (IsEOTL ? Error("Unexpected end-of-data (you may forget ';')") : \
+    Get(&TokList, &TokCurrent) ? (VOID)0 : (VOID)(IsEOTL = TRUE))
 
 #define IsTokAnyOp() \
   (!IsEOTL && TokCurrent.Id == TOK_OP)
@@ -16,19 +16,19 @@
   (!IsEOTL && TokCurrent.Id == TOK_NUM)
 #define IsTokAnyVar() \
   (!IsEOTL && TokCurrent.Id == TOK_VAR)
-#define IsTokAnyFn() \
-  (!IsEOTL && TokCurrent.Id == TOK_FN)
+#define IsTokAnyFunc() \
+  (!IsEOTL && TokCurrent.Id == TOK_FUNC)
 #define IsTokTxt() \
   (!IsEOTL && TokCurrent.Id == TOK_TXT)
 
-#define IsTokOp(C) \
-  (IsTokAnyOp() && TokCurrent.Op == (C))
-#define IsTokSym(C) \
-  (IsTokAnySym() && TokCurrent.Op == (C))
+#define IsTokOp(Ñ) \
+  (IsTokAnyOp() && TokCurrent.Op == Ñ)
+#define IsTokSym(Sym) \
+  (IsTokAnySym() && TokCurrent.Op == (Sym))
 #define IsTokKw(Keyword) \
   (!IsEOTL && TokCurrent.Id == TOK_KEYW && TokCurrent.KeyW == KW_ ## Keyword)
-#define IsTokFn(Func) \
-  (!IsEOTL && TokCurrent.Id == TOK_FN && TokCurrent.Func == FN_ ## Func)
+#define IsTokFunc(Func) \
+  (IsTokAnyFunc(Func) && TokCurrent.Func == FN_ ## Func)
 
 
 #define ParseAnyTok() \
@@ -42,7 +42,7 @@
 #define ParseSym(C) \
   (IsTokSym(C) ? NextTok() : Error("Expected symbol: %c", (C)))
 #define ParseNum(X) \
-	(IsTokAnyNum() ? (*(X) = TokCurrent.Num, NextTok()) : Error("Expected number: %lf", (X)))
+  (IsTokAnyNum() ? (*(X) = TokCurrent.Num, NextTok()) : Error("Expected number: %lf", (X)))
 #define ParseKw(Keyword) \
   (IsTokKw(Keyword) ? NextTok() : Error("Expected keyword: \"" #Keyword "\""))
 #define ParseFn(Func) \
@@ -65,34 +65,35 @@ static INT GetPrior( INT Op )
     return 1;
   case ',':
     return 2;
+  case '=':
+    return 3;
   case '<':
   case '<' + TOK_OP_ADD_EQ:
   case '>':
   case '>' + TOK_OP_ADD_EQ:
-  case '=':
   case '=' + TOK_OP_ADD_EQ:
   case '!' + TOK_OP_ADD_EQ:
-    return 3;
+    return 4;
   case '+':
   case '-':
-    return 4;
+    return 5;
   case '*':
   case '/':
   case '%':
-    return 5;
+    return 6;
   case '^':
   case '@':
-    return 6;
+    return 7;
   default:
-		Error("Unrecognised operation: %c", Op);
-		return -1;
+    //Error("Unrecognised operation: %c", Op);
+    return -1;
   }
 } /* End of 'GetPrior' function */
 
 /* Move orerations from */
 static VOID DropOpers( CHAR Op )
 {
-  while (Stack2.Top != NULL && GetPrior((INT)Stack2.Top->T.Op) >= GetPrior((INT)Op))
+  while (Stack2.Top != NULL && (GetPrior((INT)Stack2.Top->T.Op) >= GetPrior((INT)Op) || Stack2.Top->T.Id == TOK_FUNC))
   {
     TOK T;
 
@@ -104,7 +105,7 @@ static VOID DropOpers( CHAR Op )
 /* Convert expression function */
 static VOID ParseExpr( LIST **Expr )
 {
-	TOK T;
+  TOK T;
   enum
   {
     STATE_PREFIX,
@@ -114,9 +115,10 @@ static VOID ParseExpr( LIST **Expr )
   } state = STATE_PREFIX;
 
   TokList.Head = *Expr;
-	Queue1.Head = Queue1.Tail = NULL;
+  Queue1.Head = Queue1.Tail = NULL;
+  ClearStack(&Stack2);
 
-	NextTok();
+  NextTok();
   while (!IsEOTL && state != STATE_END)
   {
     switch (state)
@@ -127,24 +129,27 @@ static VOID ParseExpr( LIST **Expr )
         Put(&Queue1, TokCurrent);
         state = STATE_SUFFIX;
       }
+      else if (IsTokAnyFunc())
+        Push(&Stack2, TokCurrent);
       else if (IsTokAnyOp())
       {
         if (IsTokOp('('))
-        {
           Push(&Stack2, TokCurrent);
-        }
         else if (IsTokOp('-'))
         {
           TokCurrent.Op = '@';
           Push(&Stack2, TokCurrent);
         }
       }
-			else if (IsTokTxt())
-				if (TokList.Head != NULL)
-					state = STATE_END;
-				else
+      else if (IsTokTxt())
+        if (TokList.Head != NULL)
+        {
+          Put(&Queue1, TokCurrent);
+          state = STATE_END;
+        }
+        else
           Error("Using text in expression");
-			ParseAnyTok();
+      ParseAnyTok();
       break;
 
     case STATE_SUFFIX:
@@ -160,8 +165,8 @@ static VOID ParseExpr( LIST **Expr )
         else if (!Pop(&Stack2, &T))
           ParseAnyOp();
       }
-			else 
-				state = STATE_DONE;
+      else
+        state = STATE_DONE;
       break;
 
     case STATE_DONE:
@@ -173,42 +178,41 @@ static VOID ParseExpr( LIST **Expr )
 
   if (Stack2.Top != NULL && !IsEOTL)
     Error("Missing ')'");
-	*Expr = Queue1.Head;
+  *Expr = Queue1.Head;
+  Queue1.Head = Queue1.Tail = NULL;
 } /* End of 'Parser' function */
 
 QUEUE OldTokList;
 
 /* Get expression from 'TokList' function */
-static VOID ReadExpr( LIST **Expr)
+static VOID ReadExpr( LIST **Expr )
 {
-	INT Brackets = 0;
+  INT Brackets = 0;
   LIST **list = Expr;
 
-	if (IsTokOp('('))
-		Brackets++;
+  if (IsTokOp('('))
+    Brackets++;
 
-	while (!IsTokSym(';') && Brackets >= 0)
-		{
-			if ((*list = malloc(sizeof(LIST))) == NULL)
-			  Error("No memory");
-			(*list)->T = TokCurrent;
-			list = &(*list)->Next;
-			
-			NextTok();
-			if (IsTokOp('('))
-				Brackets++;
-			else if (IsTokOp(')'))
-				Brackets--; 
-		}
-	
-	if ((*list = malloc(sizeof(LIST))) == NULL)
-		Error("No memory");
-	(*list)->T = TokCurrent;
-	(*list)->Next = NULL;
+  while (!IsTokSym(';') && Brackets >= 0)
+  {
+    if ((*list = malloc(sizeof(LIST))) == NULL)
+      Error("No memory");
+    (*list)->T = TokCurrent;
+    list = &(*list)->Next;
 
-	OldTokList = TokList;
-	printf("TOKLIST: ");
-	DisplayQueue(&TokList);
+    NextTok();
+    if (IsTokOp('('))
+      Brackets++;
+    else if (IsTokOp(')'))
+      Brackets--;
+  }
+
+  if ((*list = malloc(sizeof(LIST))) == NULL)
+    Error("No memory");
+  (*list)->T = TokCurrent;
+  (*list)->Next = NULL;
+
+  OldTokList = TokList;
 } /* End of 'ReadExpr' function */
 
 /* Initialise comand function */
@@ -216,13 +220,10 @@ static VOID CmdInit( CMD **C )
 {
   if ((*C = malloc(sizeof(CMD))) == NULL)
     Error("No memory");
-  if (((*C)->Expr = malloc(sizeof(LIST))) == NULL)
-		Error("No memory");
-  
+
   (*C)->Id = -1;
-	
-	(*C)->Expr = NULL;
-	(*C)->C1 = (*C)->C2 = (*C)->Next = NULL;
+  (*C)->Expr = NULL;
+  (*C)->C1 = (*C)->C2 = (*C)->Next = NULL;
 } /* End of 'CmdInit' function */
 
 /* Parse comand fuction */
@@ -236,14 +237,11 @@ VOID ParseCmd( CMD **C )
 
     ParseKw(IF);
     ParseOp('(');
-
-		ReadExpr(&(*C)->Expr);
-		ParseExpr(&(*C)->Expr);
-
+    ReadExpr(&(*C)->Expr);
+    ParseExpr(&(*C)->Expr);
     TokList = OldTokList;
-		IsEOTL = TokList.Head == NULL;
-		ParseOp(')');
-
+    IsEOTL = TokList.Head == NULL;
+    ParseOp(')');
     ParseCmd(&(*C)->C1);
     if (IsTokKw(ELSE))
     {
@@ -256,51 +254,47 @@ VOID ParseCmd( CMD **C )
     CmdInit(C);
     (*C)->Id = CMD_WHILE;
 
-		ParseKw(WHILE);
-		ParseOp('(');
-
-		ReadExpr(&(*C)->Expr);
+    ParseKw(WHILE);
+    ParseOp('(');
+    ReadExpr(&(*C)->Expr);
     ParseExpr(&(*C)->Expr);
-    
-		TokList = OldTokList;
-		IsEOTL = TokList.Head == NULL;
-		ParseOp(')');
-		
+    TokList = OldTokList;
+    IsEOTL = TokList.Head == NULL;
+    ParseOp(')');
     ParseCmd(&(*C)->C1);
   }
-	else if (IsTokKw(PRINT))
-	{
+  else if (IsTokKw(PRINT))
+  {
     CmdInit(C);
-		(*C)->Id = CMD_PRINT;
+    (*C)->Id = CMD_PRINT;
 
-		ParseKw(PRINT);
-		ParseOp('(');
-
-		ReadExpr(&(*C)->Expr);
-		ParseExpr(&(*C)->Expr);
-
-		TokList = OldTokList;
-		IsEOTL = TokList.Head == NULL;
-		ParseOp(')');
-		if (!IsEOTL)
-			ParseSym(';');
-		CmdInit(&(*C)->Next);
-	}
-	else if (IsTokKw(SCAN))
-	{
+    ParseKw(PRINT);
+    ParseOp('(');
+    ReadExpr(&(*C)->Expr);
+    ParseExpr(&(*C)->Expr);
+    TokList = OldTokList;
+    IsEOTL = TokList.Head == NULL;
+    ParseOp(')');
+    if (!IsEOTL)
+      ParseSym(';');
+    // CmdInit(&(*C)->Next);
+  }
+  else if (IsTokKw(SCAN))
+  {
     CmdInit(C);
-		(*C)->Id = CMD_SCAN;
-		ParseKw(SCAN);
-		ParseOp('(');
-		ReadExpr(&(*C)->Expr);
-		
-		TokList = OldTokList;
-		IsEOTL = TokList.Head == NULL;
-		ParseOp(')');
-		if (!IsEOTL)
-			ParseSym(';');
-		CmdInit(&(*C)->Next);
-	}
+    (*C)->Id = CMD_SCAN;
+
+    ParseKw(SCAN);
+    ParseOp('(');
+    ReadExpr(&(*C)->Expr);
+    ParseExpr(&(*C)->Expr);
+    TokList = OldTokList;
+    IsEOTL = TokList.Head == NULL;
+    ParseOp(')');
+    if (!IsEOTL)
+      ParseSym(';');
+    // CmdInit(&(*C)->Next);
+  }
   else if (IsTokSym('{'))
   {
     ParseSym('{');
@@ -316,14 +310,13 @@ VOID ParseCmd( CMD **C )
     CmdInit(C);
     (*C)->Id = CMD_EXPR;
 
-		ReadExpr(&(*C)->Expr);
+    ReadExpr(&(*C)->Expr);
     ParseExpr(&(*C)->Expr);
-	
-		TokList = OldTokList;
-		IsEOTL = TokList.Head == NULL;;
-		if (!IsEOTL)
-			ParseSym(';');
-		CmdInit(&(*C)->Next);
+    TokList = OldTokList;
+    IsEOTL = TokList.Head == NULL;
+    if (!IsEOTL)
+      ParseSym(';');
+    // ParseCmd(&(*C)->Next);
   }
 } /* End of 'ParseCmd' function */
 
@@ -332,9 +325,9 @@ VOID ParseProgram( VOID )
 {
   CMD **cmd = &Proga;
 
-	Proga = NULL;
+  Proga = NULL;
   IsEOTL = 0;
-  
+
   NextTok();
 
   while (!IsEOTL)
@@ -347,12 +340,15 @@ VOID ParseProgram( VOID )
 /* Clear comand function */
 VOID CmdClear( CMD **C )
 {
-	while (*C != NULL)
-	{
-		ClearList(&(*C)->Expr);
-		CmdClear(&(*C)->C1);
-	  CmdClear(&(*C)->C2);
-	  C = &(*C)->Next;
-	}
+  if (*C != NULL)
+  {
+    CMD *Old = *C;
+
+    ClearList(&(*C)->Expr);
+    CmdClear(&(*C)->C1);
+    CmdClear(&(*C)->C2);
+    CmdClear(&(*C)->Next);
+    free(Old);
+  }
 } /* End of 'CmdClear' function */
 /* END OF 'PARSER.C' FILE */

@@ -1,3 +1,10 @@
-x = 0;
-while(x <= 10)
-  y = x + 1;
+print("Input angle: ");
+scan(angle);
+if (angle > 0)
+{
+  print("Sine is ");
+  print(sin(angle = angle * 3.141592 / 180));
+  //print("\n");
+}
+else
+  print("Only positive angles are supported!\n");

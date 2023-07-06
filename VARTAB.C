@@ -69,7 +69,7 @@ VOID DisplayVarTable( VOID )
   else
   {
     PutTree(VarTable->Less);
-		printf("%s: %lf ", VarTable->Name, VarTable->Value);
+    printf("%s = %lf\n", VarTable->Name, VarTable->Value);
     PutTree(VarTable->More);
   }
 } /* End of 'DisplayVarTable' functoin */

@@ -30,10 +30,12 @@ VOID Error( CHAR *Str, ... )
 {
   va_list ap;
 
+  SET_CONSOLE_RED();
   printf("ERROR: ");
   va_start(ap, Str);
   vprintf(Str, ap);
   va_end(ap);
+  RESET_CONSOLE();
   printf("\n");
 
   longjmp(ExprJumpBuf, 1);
@@ -51,32 +53,48 @@ VOID main ( VOID )
 
   if (setjmp(ExprJumpBuf))
   {
+    ClearQueue(&Queue1);
     ClearStack(&StackEval);
     ClearQueue(&TokList);
     ClearStack(&Stack2);
     ClearVarTable();
-		CmdClear(&Proga);
-		ClearPrinterList();
-    _getch();
+    CmdClear(&Proga);
+    ClearPrinterList();
     return;
   }
-	
+
   if ((F = fopen("Code.txt", "r")) == NULL)
     Error("Can't open file");
+
+  SET_CONSOLE_CYAN();
+  printf("Script:\n");
+  RESET_CONSOLE();
   while (fgets(Buf, sizeof(Buf) - 1, F) != NULL)
   {
-    printf("%s", Buf);
-    Scanner(&TokList, Buf);
+    if (!Scanner(&TokList, Buf))
+    {
+      SET_CONSOLE_YELLOW();
+      printf("%s", Buf);
+      RESET_CONSOLE();
+    }
+    else
+      printf("%s", Buf);
   }
   fclose(F);
-  
-	printf("\n\nScanned: ");
-	DisplayQueue(&TokList);
-	printf("\n\n");
 
+  SET_CONSOLE_CYAN();
+  // printf("\n\nScanned:\n");
+  RESET_CONSOLE();
+  // DisplayQueue(&TokList);
+
+  SET_CONSOLE_CYAN();
+  printf("\nOutput:\n");
+  RESET_CONSOLE();
   ParseProgram();
   DoCmd(Proga);
-	printf("\nVariables: ");
+  SET_CONSOLE_CYAN();
+  printf("\n\nVariables:\n");
+  RESET_CONSOLE();
   DisplayVarTable();
   printf("\n");
 

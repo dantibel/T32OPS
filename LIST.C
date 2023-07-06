@@ -5,11 +5,19 @@
 
 #include "ops.h"
 
+struct tagFNTB FuncTable[] =
+{
+  {"sin", FN_SIN},
+  {"abs", FN_ABS},
+  {"pi", FN_PI},
+  {"time", FN_TIME},
+};
+
 /* Print one token function */
 static VOID PrintTok( TOK T )
 {
-  CHAR str[MAX_NAME];
-  
+  INT i;
+
   switch (T.Id)
   {
   case TOK_NUM:
@@ -25,49 +33,38 @@ static VOID PrintTok( TOK T )
     printf("%c", T.Op);
     return;
   case TOK_VAR:
-    printf("%s", T.Name);
+    printf("%s <Variable>", T.Name);
     return;
-  /*
-	case TOK_FN:
-    switch (T.Fn)
-    {
-    case FN_SCAN:
-      strcpy(str, "scan");
-      break;
-    case FN_PRINT:
-      strcpy(str, "print");
-      break;
-    case FN_SIN:
-      strcpy(str, "sin");
-      break;
-		default:
-			*str = 0;
-    }
-    printf("%s", str);
+  case TOK_TXT:
+    printf("%s <Text>", T.Text);
     return;
-	*/
+  case TOK_FUNC:
+    for (i = 0; i < sizeof(FuncTable) / sizeof(FuncTable[0]); i++)
+      if (T.Func == FuncTable[i].Func)
+      {
+        printf(FuncTable[i].Name);
+        return;
+      }
+    return;
   case TOK_KEYW:
     switch (T.KeyW)
     {
     case KW_IF:
-      strcpy(str, "if");
+      printf("if");
       break;
     case KW_ELSE:
-      strcpy(str, "else");
+      printf("else");
       break;
     case KW_WHILE:
-      strcpy(str, "while");
+      printf("while");
       break;
-		case KW_SCAN:
-      strcpy(str, "scan");
-			break;
-		case KW_PRINT:
-      strcpy(str, "print");
+    case KW_SCAN:
+      printf("scan");
       break;
-		default:
-			*str = 0;
+    case KW_PRINT:
+      printf("print");
+      break;
     }
-    printf("%s", str);
     return;
   default:
     printf("<Unknown token>");
@@ -76,11 +73,12 @@ static VOID PrintTok( TOK T )
 } /* End of 'PrintTok' function */
 
 /* Print list function */
-static VOID DisplayList( LIST *L )
+VOID DisplayList( LIST *L )
 {
   if (L == NULL)
     printf("<No elements>\n");
-  while (L != NULL)
+  else
+    while (L != NULL)
     {
       PrintTok(L->T);
       printf((L = L->Next) == NULL ? "\n" : ", ");
@@ -90,7 +88,7 @@ static VOID DisplayList( LIST *L )
 /* Clear list function */
 VOID ClearList( LIST **L )
 {
-	while (*L != NULL)
+  while (*L != NULL)
   {
     LIST *Old = *L;
 
@@ -143,6 +141,7 @@ BOOL Get( QUEUE *Q, TOK *OldT )
 VOID ClearQueue( QUEUE *Q )
 {
   ClearList(&Q->Head);
+  Q->Tail = NULL;
 } /* End of 'ClearQueue' function */
 
 /* Input queue function */
@@ -189,7 +188,6 @@ BOOL Pop ( STACK *S, TOK *OldT )
   S->Top = S->Top->Next;
 
   free(OldElement);
-  OldElement = NULL;
   return TRUE;
 } /* End of 'Pop' funtion */
 
